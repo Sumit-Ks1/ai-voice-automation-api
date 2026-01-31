@@ -1,0 +1,16 @@
+# Render.com Blueprint
+services:
+  - type: web
+    name: ai-voice-automation
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: HOST
+        value: 0.0.0.0
+      # Add other env vars from dashboard
