@@ -37,11 +37,12 @@ const envSchema = z.object({
   REDIS_DB: z.coerce.number().int().min(0).max(15).default(0),
   REDIS_ENABLED: z.string().transform(val => val === 'true' || val === '1').default('true'),
 
-  // Business Configuration
-  BUSINESS_TIMEZONE: z.string().default('America/New_York'),
+  // Business Configuration - California Dental (Pacific Time)
+  // Hours: Mon/Wed 9-6, Tue/Thu 9-7, Fri CLOSED, Sat 9-2, Sun CLOSED
+  BUSINESS_TIMEZONE: z.string().default('America/Los_Angeles'),
   BUSINESS_HOURS_START: z.string().regex(/^\d{2}:\d{2}$/).default('09:00'),
-  BUSINESS_HOURS_END: z.string().regex(/^\d{2}:\d{2}$/).default('17:00'),
-  BUSINESS_DAYS: z.string().regex(/^[0-6](,[0-6])*$/).default('1,2,3,4,5'),
+  BUSINESS_HOURS_END: z.string().regex(/^\d{2}:\d{2}$/).default('19:00'), // 7 PM to cover latest day (Tue/Thu)
+  BUSINESS_DAYS: z.string().regex(/^[0-6](,[0-6])*$/).default('1,2,3,4,6'), // Mon-Thu + Sat (no Fri/Sun)
   APPOINTMENT_DURATION_MINUTES: z.coerce.number().int().positive().default(30),
   APPOINTMENT_BUFFER_MINUTES: z.coerce.number().int().min(0).default(15),
 
