@@ -106,6 +106,32 @@ function createApp(): Application {
     res.status(200).json(health);
   });
 
+  // Diagnostic endpoint to test configuration
+  app.get('/debug/config', (_req, res) => {
+    res.json({
+      timestamp: new Date().toISOString(),
+      environment: config.NODE_ENV,
+      ultravox: {
+        apiUrl: config.ULTRAVOX_API_URL,
+        agentId: config.ULTRAVOX_AGENT_ID ? `${config.ULTRAVOX_AGENT_ID.substring(0, 8)}...` : 'NOT SET',
+        webhookUrl: config.ULTRAVOX_WEBHOOK_URL,
+      },
+      twilio: {
+        accountSid: config.TWILIO_ACCOUNT_SID ? `${config.TWILIO_ACCOUNT_SID.substring(0, 8)}...` : 'NOT SET',
+        phoneNumber: config.TWILIO_PHONE_NUMBER,
+        signatureValidation: config.TWILIO_WEBHOOK_SIGNATURE_VALIDATION,
+      },
+      supabase: {
+        url: config.SUPABASE_URL,
+        hasAnonKey: !!config.SUPABASE_ANON_KEY,
+        hasServiceKey: !!config.SUPABASE_SERVICE_ROLE_KEY,
+      },
+      redis: {
+        enabled: config.REDIS_ENABLED,
+      },
+    });
+  });
+
   // 404 handler (must be after all routes)
   app.use(notFoundHandler);
 

@@ -109,10 +109,22 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
     res.send(twiml);
   } catch (error) {
     const duration = Date.now() - startTime;
+    
+    // Extract detailed error information
+    let errorDetails = 'Unknown error';
+    if (error instanceof Error) {
+      errorDetails = error.message;
+      if ('response' in error && (error as any).response?.data) {
+        errorDetails += ` | API Response: ${JSON.stringify((error as any).response.data)}`;
+      }
+    }
+    
     log.error(
       {
         err: error,
-        callSid: req.body.CallSid,
+        errorDetails,
+        callSid: req.body?.CallSid,
+        from: req.body?.From,
         duration,
         correlationId: req.correlationId,
       },
@@ -125,11 +137,15 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
     res.send(errorTwiml);
 
     // Update call log if possible
-    if (req.body.CallSid) {
-      await callLogRepository.markFailed(
-        req.body.CallSid,
-        error instanceof Error ? error.message : 'Unknown error'
-      );
+    if (req.body?.CallSid) {
+      try {
+        await callLogRepository.markFailed(
+          req.body.CallSid,
+          errorDetails
+        );
+      } catch (logError) {
+        log.warn({ err: logError }, 'Failed to update call log');
+      }
     }
   }
 }

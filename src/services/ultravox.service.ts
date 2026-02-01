@@ -1,14 +1,69 @@
 /**
  * Ultravox.ai service for AI voice agent integration
  * Handles session creation and management with Ultravox API
+ * 
+ * Ultravox API Documentation: https://docs.ultravox.ai
+ * Correct endpoint: POST /api/calls
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { config } from '../config/env';
 import { createChildLogger } from '../config/logger';
 import { ExternalServiceError } from '../utils/errors';
+
+// Ultravox API types based on actual API
+interface UltravoxCreateCallRequest {
+  systemPrompt?: string;
+  model?: string;
+  voice?: string;
+  temperature?: number;
+  firstSpeaker?: 'FIRST_SPEAKER_USER' | 'FIRST_SPEAKER_AGENT';
+  medium?: {
+    twilio?: Record<string, unknown>;
+    webRtc?: Record<string, unknown>;
+  };
+  initiator?: 'INITIATOR_USER' | 'INITIATOR_AGENT';
+  recordingEnabled?: boolean;
+  timeExceededMessage?: string;
+  maxDuration?: string;
+  inactivityMessages?: Array<{
+    duration: string;
+    message: string;
+  }>;
+  selectedTools?: Array<{
+    toolName: string;
+    temporaryTool?: {
+      modelToolName: string;
+      definition: {
+        name: string;
+        description: string;
+        parameters: Record<string, unknown>;
+      };
+      http?: {
+        baseUrlPattern: string;
+        httpMethod: string;
+      };
+    };
+  }>;
+}
+
+interface UltravoxCreateCallResponse {
+  callId: string;
+  created: string;
+  ended?: string;
+  model: string;
+  systemPrompt: string;
+  temperature: number;
+  voice: string;
+  languageHint?: string;
+  joinUrl: string; // This is the WebSocket URL for Twilio <Stream>
+  transcript?: string;
+  recordingEnabled: boolean;
+  maxDuration: string;
+}
+
+// Keep the old types for backward compatibility
 import type {
-  UltravoxStartSessionRequest,
   UltravoxStartSessionResponse,
   UltravoxSession,
 } from '../types/ultravox.types';
@@ -21,12 +76,27 @@ class UltravoxService {
   private log = createChildLogger({ service: 'ultravox' });
 
   constructor() {
+    // Ensure base URL doesn't include agent ID - it should just be https://api.ultravox.ai
+    let baseUrl = config.ULTRAVOX_API_URL;
+    
+    // Fix common misconfiguration: remove agent ID from URL if present
+    if (baseUrl.includes(config.ULTRAVOX_AGENT_ID)) {
+      baseUrl = baseUrl.replace(`/${config.ULTRAVOX_AGENT_ID}`, '');
+      this.log.warn({ originalUrl: config.ULTRAVOX_API_URL, fixedUrl: baseUrl }, 
+        'Fixed ULTRAVOX_API_URL - removed agent ID from base URL');
+    }
+    
+    // Ensure no trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
+    this.log.info({ baseUrl, agentId: config.ULTRAVOX_AGENT_ID }, 'Initializing Ultravox client');
+
     this.client = axios.create({
-      baseURL: config.ULTRAVOX_API_URL,
-      timeout: 10000, // 10 second timeout
+      baseURL: baseUrl,
+      timeout: 15000, // 15 second timeout
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.ULTRAVOX_API_KEY}`,
+        'X-API-Key': config.ULTRAVOX_API_KEY, // Ultravox uses X-API-Key header
         'User-Agent': 'ai-voice-automation/1.0.0',
       },
     });
@@ -60,9 +130,10 @@ class UltravoxService {
   }
 
   /**
-   * Start new AI voice agent session
+   * Start new AI voice agent session (creates a call)
    * Creates a WebSocket stream URL for Twilio to connect to
-   * Handles anonymous callers (null phone number)
+   * 
+   * Ultravox API: POST /api/calls
    * 
    * @param callSid - Twilio Call SID
    * @param phoneNumber - Caller's phone number (null for anonymous)
@@ -71,50 +142,69 @@ class UltravoxService {
   async startSession(
     callSid: string,
     phoneNumber: string | null,
-    metadata?: Record<string, any>
+    _metadata?: Record<string, any>
   ): Promise<UltravoxStartSessionResponse> {
     const startTime = Date.now();
 
     try {
-      const payload: UltravoxStartSessionRequest = {
-        agentId: config.ULTRAVOX_AGENT_ID,
-        metadata: {
-          callSid,
-          phoneNumber: phoneNumber || 'anonymous',
-          direction: 'inbound',
-          timestamp: new Date().toISOString(),
-          isAnonymous: !phoneNumber,
-          ...metadata,
-        },
-        // Optional: customize AI behavior per call
+      // Build request payload for Ultravox /api/calls endpoint
+      const payload: UltravoxCreateCallRequest = {
         systemPrompt: this.buildSystemPrompt(),
+        model: 'fixie-ai/ultravox-70B', // or 'fixie-ai/ultravox'
+        voice: 'terrence', // Default voice, can be configured
         temperature: 0.7,
-        maxTokens: 500,
+        firstSpeaker: 'FIRST_SPEAKER_AGENT',
+        initiator: 'INITIATOR_USER', // Inbound call
+        recordingEnabled: false,
+        maxDuration: '600s', // 10 minutes max
+        // Twilio medium configuration
+        medium: {
+          twilio: {}
+        },
+        // Configure tools for appointment management
+        selectedTools: this.buildToolsConfig(),
       };
 
-      this.log.info({ callSid, phoneNumber: phoneNumber || 'anonymous' }, 'Starting Ultravox session');
+      this.log.info({ 
+        callSid, 
+        phoneNumber: phoneNumber || 'anonymous',
+        apiUrl: `${this.client.defaults.baseURL}/api/calls`
+      }, 'Starting Ultravox call');
 
-      const response = await this.client.post<UltravoxStartSessionResponse>(
-        '/sessions/start',
+      const response = await this.client.post<UltravoxCreateCallResponse>(
+        '/api/calls',
         payload
       );
 
       const duration = Date.now() - startTime;
       this.log.info(
         {
-          sessionId: response.data.sessionId,
+          callId: response.data.callId,
+          joinUrl: response.data.joinUrl,
           callSid,
           duration,
         },
-        'Ultravox session started successfully'
+        'Ultravox call created successfully'
       );
 
-      return response.data;
+      // Map to our response format
+      return {
+        sessionId: response.data.callId,
+        streamUrl: response.data.joinUrl, // This is the WebSocket URL for Twilio
+        status: 'created',
+        expiresAt: response.data.ended || new Date(Date.now() + 600000).toISOString(),
+        metadata: {
+          callSid,
+          phoneNumber,
+          model: response.data.model,
+          voice: response.data.voice,
+        },
+      };
     } catch (error) {
       const duration = Date.now() - startTime;
       this.log.error(
         { err: error, callSid, duration },
-        'Failed to start Ultravox session'
+        'Failed to start Ultravox call'
       );
 
       throw new ExternalServiceError(
@@ -126,20 +216,137 @@ class UltravoxService {
   }
 
   /**
-   * Get session details
-   * @param sessionId - Ultravox session ID
+   * Build tools configuration for Ultravox
+   * These tools call back to our webhook endpoints
+   */
+  private buildToolsConfig(): UltravoxCreateCallRequest['selectedTools'] {
+    const baseUrl = config.ULTRAVOX_WEBHOOK_URL;
+    
+    return [
+      {
+        toolName: 'createAppointment',
+        temporaryTool: {
+          modelToolName: 'createAppointment',
+          definition: {
+            name: 'createAppointment',
+            description: 'Book a new appointment for a patient',
+            parameters: {
+              type: 'object',
+              properties: {
+                full_name: { type: 'string', description: 'Patient full name' },
+                phone_number: { type: 'string', description: '10-digit phone number' },
+                preferred_date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
+                preferred_time: { type: 'string', description: 'Time in HH:MM 24-hour format' },
+                reason_for_visit: { type: 'string', description: 'Reason for appointment' },
+              },
+              required: ['full_name', 'phone_number', 'preferred_date', 'preferred_time'],
+            },
+          },
+          http: {
+            baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/create`,
+            httpMethod: 'POST',
+          },
+        },
+      },
+      {
+        toolName: 'checkAppointment',
+        temporaryTool: {
+          modelToolName: 'checkAppointment',
+          definition: {
+            name: 'checkAppointment',
+            description: 'Look up existing appointments',
+            parameters: {
+              type: 'object',
+              properties: {
+                phone_number: { type: 'string', description: 'Phone number used for booking' },
+                full_name: { type: 'string', description: 'Name for verification' },
+              },
+              required: ['phone_number', 'full_name'],
+            },
+          },
+          http: {
+            baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/check`,
+            httpMethod: 'POST',
+          },
+        },
+      },
+      {
+        toolName: 'editAppointment',
+        temporaryTool: {
+          modelToolName: 'editAppointment',
+          definition: {
+            name: 'editAppointment',
+            description: 'Modify an existing appointment date or time',
+            parameters: {
+              type: 'object',
+              properties: {
+                phone_number: { type: 'string', description: 'Phone number used for booking' },
+                full_name: { type: 'string', description: 'Name for verification' },
+                original_date: { type: 'string', description: 'Original appointment date' },
+                new_date: { type: 'string', description: 'New date (optional)' },
+                new_time: { type: 'string', description: 'New time (optional)' },
+              },
+              required: ['phone_number', 'full_name', 'original_date'],
+            },
+          },
+          http: {
+            baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/edit`,
+            httpMethod: 'POST',
+          },
+        },
+      },
+      {
+        toolName: 'cancelAppointment',
+        temporaryTool: {
+          modelToolName: 'cancelAppointment',
+          definition: {
+            name: 'cancelAppointment',
+            description: 'Cancel an existing appointment',
+            parameters: {
+              type: 'object',
+              properties: {
+                phone_number: { type: 'string', description: 'Phone number used for booking' },
+                full_name: { type: 'string', description: 'Name for verification' },
+                appointment_date: { type: 'string', description: 'Date of appointment to cancel' },
+                cancellation_reason: { type: 'string', description: 'Reason for cancellation' },
+              },
+              required: ['phone_number', 'full_name', 'appointment_date'],
+            },
+          },
+          http: {
+            baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/cancel`,
+            httpMethod: 'POST',
+          },
+        },
+      },
+    ];
+  }
+
+  /**
+   * Get session/call details
+   * @param sessionId - Ultravox call ID
    */
   async getSession(sessionId: string): Promise<UltravoxSession> {
     try {
-      this.log.debug({ sessionId }, 'Fetching Ultravox session');
+      this.log.debug({ sessionId }, 'Fetching Ultravox call');
 
-      const response = await this.client.get<UltravoxSession>(
-        `/sessions/${sessionId}`
+      const response = await this.client.get<UltravoxCreateCallResponse>(
+        `/api/calls/${sessionId}`
       );
 
-      return response.data;
+      return {
+        sessionId: response.data.callId,
+        agentId: config.ULTRAVOX_AGENT_ID,
+        status: response.data.ended ? 'completed' : 'active',
+        createdAt: response.data.created,
+        endedAt: response.data.ended,
+        metadata: {
+          model: response.data.model,
+          voice: response.data.voice,
+        },
+      };
     } catch (error) {
-      this.log.error({ err: error, sessionId }, 'Failed to fetch Ultravox session');
+      this.log.error({ err: error, sessionId }, 'Failed to fetch Ultravox call');
 
       throw new ExternalServiceError(
         'Ultravox',
@@ -150,48 +357,65 @@ class UltravoxService {
   }
 
   /**
-   * End active session
-   * @param sessionId - Ultravox session ID
+   * End active session/call
+   * @param sessionId - Ultravox call ID
    */
   async endSession(sessionId: string): Promise<void> {
     try {
-      this.log.info({ sessionId }, 'Ending Ultravox session');
+      this.log.info({ sessionId }, 'Ending Ultravox call');
 
-      await this.client.post(`/sessions/${sessionId}/end`);
+      await this.client.delete(`/api/calls/${sessionId}`);
 
-      this.log.info({ sessionId }, 'Ultravox session ended');
+      this.log.info({ sessionId }, 'Ultravox call ended');
     } catch (error) {
-      this.log.error({ err: error, sessionId }, 'Failed to end Ultravox session');
+      this.log.error({ err: error, sessionId }, 'Failed to end Ultravox call');
       // Don't throw - session ending is best effort
     }
   }
 
   /**
    * Build system prompt for AI agent
-   * Customize based on business requirements
+   * Customize based on California Dental business requirements
    */
   private buildSystemPrompt(): string {
-    return `You are a friendly and professional medical appointment assistant.
+    return `You are Sarah, a friendly and professional AI receptionist for California Dental.
 
-Your responsibilities:
-1. Greet the caller warmly
-2. Identify their intent (book, modify, cancel, or check appointment)
-3. Collect required information:
-   - Patient full name
-   - Phone number (verify if it matches caller ID)
-   - Preferred date and time
-   - Reason for visit (if booking)
-   - Existing appointment ID (if modifying/canceling)
+CRITICAL RULES:
+- You ONLY help NEW patients book appointments
+- EXISTING patients must be transferred to staff (use transfer reason: "existing_patient")
+- When caller says they're an existing patient or have been here before, IMMEDIATELY transfer
 
-Guidelines:
-- Be conversational and empathetic
-- Confirm details before finalizing
-- Handle business hours (${config.BUSINESS_HOURS_START} - ${config.BUSINESS_HOURS_END} ${config.BUSINESS_TIMEZONE})
-- Clarify ambiguous requests
-- Keep responses concise
-- If you cannot help, offer to transfer to a human
+GREETING:
+"Thank you for calling California Dental, this is Sarah. Are you a new patient looking to schedule an appointment, or an existing patient?"
 
-Output format: Provide structured JSON with intent and extracted parameters.`;
+IF NEW PATIENT - Collect in order:
+1. Full name (first and last)
+2. Phone number (10 digits, read back to confirm)
+3. Reason for visit (cleaning, checkup, tooth pain, etc.)
+4. Preferred date and time
+
+BUSINESS HOURS (Pacific Time):
+- Monday: 9 AM - 6 PM
+- Tuesday: 9 AM - 7 PM  
+- Wednesday: 9 AM - 6 PM
+- Thursday: 9 AM - 7 PM
+- Friday: CLOSED
+- Saturday: 9 AM - 2 PM
+- Sunday: CLOSED
+
+STYLE:
+- Warm, conversational, professional
+- Confirm details before booking
+- Keep responses brief
+- One question at a time
+
+WHEN TO TRANSFER:
+- Existing patients
+- Insurance questions
+- Billing questions
+- Emergencies
+- Complex requests
+- Caller requests human`;
   }
 
   /**
