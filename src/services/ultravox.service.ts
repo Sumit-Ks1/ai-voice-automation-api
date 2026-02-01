@@ -30,9 +30,10 @@ interface UltravoxCreateCallRequest {
     duration: string;
     message: string;
   }>;
+  // selectedTools is a "oneof" - use EITHER toolName OR temporaryTool, not both
   selectedTools?: Array<{
-    toolName: string;
-    temporaryTool?: {
+    toolName?: string; // For pre-registered tools
+    temporaryTool?: {  // For inline tool definitions
       modelToolName: string;
       definition: {
         name: string;
@@ -218,13 +219,15 @@ class UltravoxService {
   /**
    * Build tools configuration for Ultravox
    * These tools call back to our webhook endpoints
+   * 
+   * IMPORTANT: selectedTools uses "oneof" - use EITHER toolName OR temporaryTool, not both!
    */
   private buildToolsConfig(): UltravoxCreateCallRequest['selectedTools'] {
     const baseUrl = config.ULTRAVOX_WEBHOOK_URL;
     
     return [
       {
-        toolName: 'createAppointment',
+        // Only use temporaryTool for inline tool definitions (no toolName!)
         temporaryTool: {
           modelToolName: 'createAppointment',
           definition: {
@@ -249,7 +252,6 @@ class UltravoxService {
         },
       },
       {
-        toolName: 'checkAppointment',
         temporaryTool: {
           modelToolName: 'checkAppointment',
           definition: {
@@ -271,7 +273,6 @@ class UltravoxService {
         },
       },
       {
-        toolName: 'editAppointment',
         temporaryTool: {
           modelToolName: 'editAppointment',
           definition: {
@@ -296,7 +297,6 @@ class UltravoxService {
         },
       },
       {
-        toolName: 'cancelAppointment',
         temporaryTool: {
           modelToolName: 'cancelAppointment',
           definition: {
