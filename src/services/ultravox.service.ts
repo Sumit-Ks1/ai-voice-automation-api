@@ -22,7 +22,7 @@ interface UltravoxCreateCallRequest {
     twilio?: Record<string, unknown>;
     webRtc?: Record<string, unknown>;
   };
-  initiator?: 'INITIATOR_USER' | 'INITIATOR_AGENT';
+  // Note: 'initiator' is NOT a valid Ultravox field - do not add it
   recordingEnabled?: boolean;
   timeExceededMessage?: string;
   maxDuration?: string;
@@ -154,7 +154,7 @@ class UltravoxService {
         voice: 'terrence', // Default voice, can be configured
         temperature: 0.7,
         firstSpeaker: 'FIRST_SPEAKER_AGENT',
-        initiator: 'INITIATOR_USER', // Inbound call
+        // Note: 'initiator' field is NOT valid per Ultravox API - removed
         recordingEnabled: false,
         maxDuration: '600s', // 10 minutes max
         // Twilio medium configuration
