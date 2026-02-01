@@ -1,0 +1,216 @@
+{
+  "agent": {
+    "name": "Sarah",
+    "voice": "female-en-us-neural",
+    "language": "en-US",
+    "firstMessage": "Thank you for calling California Dental, this is Sarah. How may I help you today?",
+    "silenceTimeout": 5000,
+    "maxCallDuration": 600000,
+    "interruptible": true
+  },
+  "tools": [
+    {
+      "name": "createAppointment",
+      "description": "Book a new appointment for a new patient. Use after collecting and confirming: full name, phone number, date (YYYY-MM-DD), time (HH:MM), and reason.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["create_appointment"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "full_name": {
+                "type": "string",
+                "description": "Patient's full name"
+              },
+              "phone_number": {
+                "type": "string",
+                "pattern": "^[0-9]{10}$",
+                "description": "10-digit phone number without formatting"
+              },
+              "preferred_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "description": "Date in YYYY-MM-DD format"
+              },
+              "preferred_time": {
+                "type": "string",
+                "pattern": "^[0-9]{2}:[0-9]{2}$",
+                "description": "Time in HH:MM 24-hour format"
+              },
+              "reason_for_visit": {
+                "type": "string",
+                "description": "Reason for appointment"
+              },
+              "patient_type": {
+                "type": "string",
+                "enum": ["new"]
+              }
+            },
+            "required": ["full_name", "phone_number", "preferred_date", "preferred_time", "reason_for_visit", "patient_type"]
+          }
+        },
+        "required": ["intent", "data"]
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+    },
+    {
+      "name": "checkAppointment",
+      "description": "Look up existing appointments using phone number and name for verification.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["check_appointment"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "phone_number": {
+                "type": "string",
+                "pattern": "^[0-9]{10}$"
+              },
+              "full_name": {
+                "type": "string"
+              }
+            },
+            "required": ["phone_number", "full_name"]
+          }
+        },
+        "required": ["intent", "data"]
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+    },
+    {
+      "name": "editAppointment",
+      "description": "Modify an existing appointment's date and/or time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["edit_appointment"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "phone_number": {
+                "type": "string",
+                "pattern": "^[0-9]{10}$"
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "original_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "new_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "new_time": {
+                "type": "string",
+                "pattern": "^[0-9]{2}:[0-9]{2}$"
+              }
+            },
+            "required": ["phone_number", "full_name", "original_date"]
+          }
+        },
+        "required": ["intent", "data"]
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+    },
+    {
+      "name": "cancelAppointment",
+      "description": "Cancel an existing appointment. Requires verbal confirmation first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": ["cancel_appointment"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "phone_number": {
+                "type": "string",
+                "pattern": "^[0-9]{10}$"
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "appointment_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "cancellation_reason": {
+                "type": "string"
+              }
+            },
+            "required": ["phone_number", "full_name", "appointment_date"]
+          }
+        },
+        "required": ["intent", "data"]
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+    },
+    {
+      "name": "transferCall",
+      "description": "Transfer to human staff for existing patients, insurance, or complex requests.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": ["existing_patient", "insurance_question", "billing_question", "complex_request", "caller_request", "error_fallback"]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": ["reason"]
+      }
+    },
+    {
+      "name": "endCall",
+      "description": "End the call politely after completing the interaction.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": ["appointment_booked", "appointment_modified", "appointment_cancelled", "information_provided", "transferred", "caller_hangup", "no_action"]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": ["outcome"]
+      }
+    }
+  ],
+  "businessHours": {
+    "timezone": "America/Los_Angeles",
+    "schedule": {
+      "monday": { "open": "09:00", "close": "18:00" },
+      "tuesday": { "open": "09:00", "close": "19:00" },
+      "wednesday": { "open": "09:00", "close": "18:00" },
+      "thursday": { "open": "09:00", "close": "19:00" },
+      "friday": null,
+      "saturday": { "open": "09:00", "close": "14:00" },
+      "sunday": null
+    }
+  },
+  "appointmentSettings": {
+    "defaultDurationMinutes": 30,
+    "bufferMinutes": 10,
+    "maxAdvanceBookingDays": 90,
+    "minAdvanceBookingHours": 2
+  }
+}
