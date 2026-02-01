@@ -112,12 +112,19 @@ export async function checkRedisHealth(): Promise<boolean> {
 
 /**
  * Cache helper functions
+ * These gracefully handle the case when Redis is disabled
  */
 export async function setCache(
   key: string,
   value: string | object,
   ttlSeconds?: number
 ): Promise<void> {
+  // Skip caching if Redis is disabled
+  if (!config.REDIS_ENABLED) {
+    logger.debug({ key }, 'Redis disabled, skipping cache set');
+    return;
+  }
+
   try {
     const client = await getRedisClient();
     const stringValue = typeof value === 'object' ? JSON.stringify(value) : value;
@@ -134,6 +141,12 @@ export async function setCache(
 }
 
 export async function getCache<T = string>(key: string): Promise<T | null> {
+  // Return null if Redis is disabled
+  if (!config.REDIS_ENABLED) {
+    logger.debug({ key }, 'Redis disabled, skipping cache get');
+    return null;
+  }
+
   try {
     const client = await getRedisClient();
     const value = await client.get(key);
@@ -155,6 +168,12 @@ export async function getCache<T = string>(key: string): Promise<T | null> {
 }
 
 export async function deleteCache(key: string): Promise<void> {
+  // Skip if Redis is disabled
+  if (!config.REDIS_ENABLED) {
+    logger.debug({ key }, 'Redis disabled, skipping cache delete');
+    return;
+  }
+
   try {
     const client = await getRedisClient();
     await client.del(key);
@@ -165,6 +184,11 @@ export async function deleteCache(key: string): Promise<void> {
 }
 
 export async function existsCache(key: string): Promise<boolean> {
+  // Return false if Redis is disabled
+  if (!config.REDIS_ENABLED) {
+    return false;
+  }
+
   try {
     const client = await getRedisClient();
     const exists = await client.exists(key);
