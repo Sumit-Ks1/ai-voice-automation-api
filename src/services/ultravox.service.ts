@@ -22,7 +22,6 @@ interface UltravoxCreateCallRequest {
     twilio?: Record<string, unknown>;
     webRtc?: Record<string, unknown>;
   };
-  // Note: 'initiator' is NOT a valid Ultravox field - do not add it
   recordingEnabled?: boolean;
   timeExceededMessage?: string;
   maxDuration?: string;
@@ -30,16 +29,18 @@ interface UltravoxCreateCallRequest {
     duration: string;
     message: string;
   }>;
-  // selectedTools is a "oneof" - use EITHER toolName OR temporaryTool, not both
+  // selectedTools - use EITHER toolName OR temporaryTool, not both
   selectedTools?: Array<{
     toolName?: string; // For pre-registered tools
-    temporaryTool?: {  // For inline tool definitions
+    temporaryTool?: {  // For inline tool definitions - FLAT structure, no "definition" wrapper
       modelToolName: string;
-      definition: {
+      description: string;
+      dynamicParameters?: Array<{
         name: string;
-        description: string;
-        parameters: Record<string, unknown>;
-      };
+        location: 'PARAMETER_LOCATION_BODY' | 'PARAMETER_LOCATION_QUERY' | 'PARAMETER_LOCATION_PATH';
+        schema: Record<string, unknown>;
+        required: boolean;
+      }>;
       http?: {
         baseUrlPattern: string;
         httpMethod: string;
@@ -220,31 +221,52 @@ class UltravoxService {
    * Build tools configuration for Ultravox
    * These tools call back to our webhook endpoints
    * 
-   * IMPORTANT: selectedTools uses "oneof" - use EITHER toolName OR temporaryTool, not both!
+   * Ultravox temporaryTool structure (FLAT - no "definition" wrapper):
+   * - modelToolName: string
+   * - description: string  
+   * - dynamicParameters: array of parameters
+   * - http: { baseUrlPattern, httpMethod }
    */
   private buildToolsConfig(): UltravoxCreateCallRequest['selectedTools'] {
     const baseUrl = config.ULTRAVOX_WEBHOOK_URL;
     
     return [
       {
-        // Only use temporaryTool for inline tool definitions (no toolName!)
         temporaryTool: {
           modelToolName: 'createAppointment',
-          definition: {
-            name: 'createAppointment',
-            description: 'Book a new appointment for a patient',
-            parameters: {
-              type: 'object',
-              properties: {
-                full_name: { type: 'string', description: 'Patient full name' },
-                phone_number: { type: 'string', description: '10-digit phone number' },
-                preferred_date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-                preferred_time: { type: 'string', description: 'Time in HH:MM 24-hour format' },
-                reason_for_visit: { type: 'string', description: 'Reason for appointment' },
-              },
-              required: ['full_name', 'phone_number', 'preferred_date', 'preferred_time'],
+          description: 'Book a new appointment for a patient. Call this when a new patient wants to schedule an appointment.',
+          dynamicParameters: [
+            {
+              name: 'full_name',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Patient full name (first and last)' },
+              required: true,
             },
-          },
+            {
+              name: 'phone_number',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: '10-digit phone number' },
+              required: true,
+            },
+            {
+              name: 'preferred_date',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Preferred date in YYYY-MM-DD format' },
+              required: true,
+            },
+            {
+              name: 'preferred_time',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Preferred time in HH:MM 24-hour format' },
+              required: true,
+            },
+            {
+              name: 'reason_for_visit',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Reason for the appointment (e.g., cleaning, checkup, tooth pain)' },
+              required: false,
+            },
+          ],
           http: {
             baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/create`,
             httpMethod: 'POST',
@@ -254,18 +276,21 @@ class UltravoxService {
       {
         temporaryTool: {
           modelToolName: 'checkAppointment',
-          definition: {
-            name: 'checkAppointment',
-            description: 'Look up existing appointments',
-            parameters: {
-              type: 'object',
-              properties: {
-                phone_number: { type: 'string', description: 'Phone number used for booking' },
-                full_name: { type: 'string', description: 'Name for verification' },
-              },
-              required: ['phone_number', 'full_name'],
+          description: 'Look up existing appointments for a patient by phone number and name.',
+          dynamicParameters: [
+            {
+              name: 'phone_number',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Phone number used for booking' },
+              required: true,
             },
-          },
+            {
+              name: 'full_name',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Name for verification' },
+              required: true,
+            },
+          ],
           http: {
             baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/check`,
             httpMethod: 'POST',
@@ -275,21 +300,39 @@ class UltravoxService {
       {
         temporaryTool: {
           modelToolName: 'editAppointment',
-          definition: {
-            name: 'editAppointment',
-            description: 'Modify an existing appointment date or time',
-            parameters: {
-              type: 'object',
-              properties: {
-                phone_number: { type: 'string', description: 'Phone number used for booking' },
-                full_name: { type: 'string', description: 'Name for verification' },
-                original_date: { type: 'string', description: 'Original appointment date' },
-                new_date: { type: 'string', description: 'New date (optional)' },
-                new_time: { type: 'string', description: 'New time (optional)' },
-              },
-              required: ['phone_number', 'full_name', 'original_date'],
+          description: 'Modify an existing appointment to change the date or time.',
+          dynamicParameters: [
+            {
+              name: 'phone_number',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Phone number used for booking' },
+              required: true,
             },
-          },
+            {
+              name: 'full_name',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Name for verification' },
+              required: true,
+            },
+            {
+              name: 'original_date',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Original appointment date in YYYY-MM-DD format' },
+              required: true,
+            },
+            {
+              name: 'new_date',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'New date in YYYY-MM-DD format' },
+              required: false,
+            },
+            {
+              name: 'new_time',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'New time in HH:MM 24-hour format' },
+              required: false,
+            },
+          ],
           http: {
             baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/edit`,
             httpMethod: 'POST',
@@ -299,20 +342,33 @@ class UltravoxService {
       {
         temporaryTool: {
           modelToolName: 'cancelAppointment',
-          definition: {
-            name: 'cancelAppointment',
-            description: 'Cancel an existing appointment',
-            parameters: {
-              type: 'object',
-              properties: {
-                phone_number: { type: 'string', description: 'Phone number used for booking' },
-                full_name: { type: 'string', description: 'Name for verification' },
-                appointment_date: { type: 'string', description: 'Date of appointment to cancel' },
-                cancellation_reason: { type: 'string', description: 'Reason for cancellation' },
-              },
-              required: ['phone_number', 'full_name', 'appointment_date'],
+          description: 'Cancel an existing appointment.',
+          dynamicParameters: [
+            {
+              name: 'phone_number',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Phone number used for booking' },
+              required: true,
             },
-          },
+            {
+              name: 'full_name',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Name for verification' },
+              required: true,
+            },
+            {
+              name: 'appointment_date',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Date of appointment to cancel in YYYY-MM-DD format' },
+              required: true,
+            },
+            {
+              name: 'cancellation_reason',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: { type: 'string', description: 'Reason for cancellation' },
+              required: false,
+            },
+          ],
           http: {
             baseUrlPattern: `${baseUrl}/api/v1/webhooks/ultravox/appointment/cancel`,
             httpMethod: 'POST',
