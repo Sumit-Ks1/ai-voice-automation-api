@@ -15,47 +15,33 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "intent": {
+          "full_name": {
             "type": "string",
-            "enum": ["create_appointment"]
+            "description": "Patient's full name"
           },
-          "data": {
-            "type": "object",
-            "properties": {
-              "full_name": {
-                "type": "string",
-                "description": "Patient's full name"
-              },
-              "phone_number": {
-                "type": "string",
-                "pattern": "^[0-9]{10}$",
-                "description": "10-digit phone number without formatting"
-              },
-              "preferred_date": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-                "description": "Date in YYYY-MM-DD format"
-              },
-              "preferred_time": {
-                "type": "string",
-                "pattern": "^[0-9]{2}:[0-9]{2}$",
-                "description": "Time in HH:MM 24-hour format"
-              },
-              "reason_for_visit": {
-                "type": "string",
-                "description": "Reason for appointment"
-              },
-              "patient_type": {
-                "type": "string",
-                "enum": ["new"]
-              }
-            },
-            "required": ["full_name", "phone_number", "preferred_date", "preferred_time", "reason_for_visit", "patient_type"]
+          "phone_number": {
+            "type": "string",
+            "pattern": "^[0-9]{10}$",
+            "description": "10-digit phone number without formatting"
+          },
+          "preferred_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "Date in YYYY-MM-DD format"
+          },
+          "preferred_time": {
+            "type": "string",
+            "pattern": "^[0-9]{2}:[0-9]{2}$",
+            "description": "Time in HH:MM 24-hour format"
+          },
+          "reason_for_visit": {
+            "type": "string",
+            "description": "Reason for appointment"
           }
         },
-        "required": ["intent", "data"]
+        "required": ["full_name", "phone_number", "preferred_date", "preferred_time", "reason_for_visit"]
       },
-      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/appointment/create"
     },
     {
       "name": "checkAppointment",
@@ -63,27 +49,19 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "intent": {
+          "phone_number": {
             "type": "string",
-            "enum": ["check_appointment"]
+            "pattern": "^[0-9]{10}$",
+            "description": "Phone number used for booking"
           },
-          "data": {
-            "type": "object",
-            "properties": {
-              "phone_number": {
-                "type": "string",
-                "pattern": "^[0-9]{10}$"
-              },
-              "full_name": {
-                "type": "string"
-              }
-            },
-            "required": ["phone_number", "full_name"]
+          "full_name": {
+            "type": "string",
+            "description": "Name for verification"
           }
         },
-        "required": ["intent", "data"]
+        "required": ["phone_number", "full_name"]
       },
-      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/appointment/check"
     },
     {
       "name": "editAppointment",
@@ -91,39 +69,34 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "intent": {
+          "phone_number": {
             "type": "string",
-            "enum": ["edit_appointment"]
+            "pattern": "^[0-9]{10}$",
+            "description": "Phone number used for booking"
           },
-          "data": {
-            "type": "object",
-            "properties": {
-              "phone_number": {
-                "type": "string",
-                "pattern": "^[0-9]{10}$"
-              },
-              "full_name": {
-                "type": "string"
-              },
-              "original_date": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-              },
-              "new_date": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-              },
-              "new_time": {
-                "type": "string",
-                "pattern": "^[0-9]{2}:[0-9]{2}$"
-              }
-            },
-            "required": ["phone_number", "full_name", "original_date"]
+          "full_name": {
+            "type": "string",
+            "description": "Name for verification"
+          },
+          "original_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "Original appointment date"
+          },
+          "new_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "New date (optional if only changing time)"
+          },
+          "new_time": {
+            "type": "string",
+            "pattern": "^[0-9]{2}:[0-9]{2}$",
+            "description": "New time (optional if only changing date)"
           }
         },
-        "required": ["intent", "data"]
+        "required": ["phone_number", "full_name", "original_date"]
       },
-      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/appointment/edit"
     },
     {
       "name": "cancelAppointment",
@@ -131,34 +104,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "intent": {
+          "phone_number": {
             "type": "string",
-            "enum": ["cancel_appointment"]
+            "pattern": "^[0-9]{10}$",
+            "description": "Phone number used for booking"
           },
-          "data": {
-            "type": "object",
-            "properties": {
-              "phone_number": {
-                "type": "string",
-                "pattern": "^[0-9]{10}$"
-              },
-              "full_name": {
-                "type": "string"
-              },
-              "appointment_date": {
-                "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-              },
-              "cancellation_reason": {
-                "type": "string"
-              }
-            },
-            "required": ["phone_number", "full_name", "appointment_date"]
+          "full_name": {
+            "type": "string",
+            "description": "Name for verification"
+          },
+          "appointment_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "Date of appointment to cancel"
+          },
+          "cancellation_reason": {
+            "type": "string",
+            "description": "Optional reason for cancellation"
           }
         },
-        "required": ["intent", "data"]
+        "required": ["phone_number", "full_name", "appointment_date"]
       },
-      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox"
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/appointment/cancel"
     },
     {
       "name": "transferCall",
@@ -168,14 +135,17 @@
         "properties": {
           "reason": {
             "type": "string",
-            "enum": ["existing_patient", "insurance_question", "billing_question", "complex_request", "caller_request", "error_fallback"]
+            "enum": ["existing_patient", "insurance_question", "billing_question", "complex_request", "caller_request", "error_fallback"],
+            "description": "Reason for transfer"
           },
           "notes": {
-            "type": "string"
+            "type": "string",
+            "description": "Brief notes about what caller needs"
           }
         },
         "required": ["reason"]
-      }
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/call/transfer"
     },
     {
       "name": "endCall",
@@ -185,14 +155,17 @@
         "properties": {
           "outcome": {
             "type": "string",
-            "enum": ["appointment_booked", "appointment_modified", "appointment_cancelled", "information_provided", "transferred", "caller_hangup", "no_action"]
+            "enum": ["appointment_booked", "appointment_modified", "appointment_cancelled", "information_provided", "transferred", "caller_hangup", "no_action"],
+            "description": "The outcome of the call"
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "description": "Brief summary of what was accomplished"
           }
         },
         "required": ["outcome"]
-      }
+      },
+      "webhookUrl": "{{WEBHOOK_BASE_URL}}/api/v1/webhooks/ultravox/call/end"
     }
   ],
   "businessHours": {
