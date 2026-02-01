@@ -27,7 +27,7 @@ class CallLogRepository {
         call_sid: data.call_sid!,
         session_id: data.session_id || null,
         user_id: data.user_id || null,
-        from_number: data.from_number!,
+        from_number: data.from_number || null,
         to_number: data.to_number!,
         direction: data.direction || 'inbound',
         status: data.status || 'initiated',

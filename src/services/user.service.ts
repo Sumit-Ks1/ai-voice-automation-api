@@ -5,7 +5,7 @@
 
 import userRepository from '../repositories/user.repository';
 import { createChildLogger } from '../config/logger';
-import { normalizePhoneNumber, arePhoneNumbersEqual } from '../utils/phone.utils';
+import { normalizePhoneNumber, isAnonymousCaller } from '../utils/phone.utils';
 // Error types available if needed
 // import { ValidationError, NotFoundError } from '../utils/errors';
 import type { User } from '../types/appointment.types';
@@ -16,15 +16,29 @@ class UserService {
   /**
    * Verify user by phone number and optional name
    * Used during call authentication
+   * Handles anonymous callers by creating a temporary session user
    * 
-   * @param phoneNumber - User's phone number
+   * @param phoneNumber - User's phone number (can be null for anonymous callers)
    * @param name - Optional user name for additional verification
    */
-  async verifyUser(phoneNumber: string, name?: string): Promise<User> {
+  async verifyUser(phoneNumber: string | null | undefined, name?: string): Promise<User> {
     try {
       this.log.info({ phoneNumber, name }, 'Verifying user');
 
+      // Handle anonymous callers
+      if (isAnonymousCaller(phoneNumber)) {
+        this.log.info('Anonymous caller detected, creating temporary user');
+        return await userRepository.createAnonymousUser();
+      }
+
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      
+      // If normalization failed, treat as anonymous
+      if (!normalizedPhone) {
+        this.log.info({ phoneNumber }, 'Invalid phone number, creating anonymous user');
+        return await userRepository.createAnonymousUser();
+      }
+
       let user = await userRepository.findByPhone(normalizedPhone);
 
       if (!user) {
@@ -53,6 +67,9 @@ class UserService {
   async getUserByPhone(phoneNumber: string): Promise<User | null> {
     try {
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      if (!normalizedPhone) {
+        return null;
+      }
       return await userRepository.findByPhone(normalizedPhone);
     } catch (error) {
       this.log.error({ err: error, phoneNumber }, 'Failed to get user by phone');
@@ -108,7 +125,12 @@ class UserService {
    */
   matchPhoneNumbers(phone1: string, phone2: string): boolean {
     try {
-      return arePhoneNumbersEqual(phone1, phone2);
+      const normalized1 = normalizePhoneNumber(phone1);
+      const normalized2 = normalizePhoneNumber(phone2);
+      if (!normalized1 || !normalized2) {
+        return false;
+      }
+      return normalized1 === normalized2;
     } catch (error) {
       this.log.warn({ phone1, phone2 }, 'Failed to match phone numbers');
       return false;

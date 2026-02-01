@@ -44,8 +44,11 @@ class AppointmentService {
       this.log.info({ input, phoneNumber }, 'Creating appointment');
 
       // Normalize phone number
-      const normalizedPhone = normalizePhoneNumber(phoneNumber);
-      input.patientPhone = normalizePhoneNumber(input.patientPhone);
+      const normalizedPhone = normalizePhoneNumber(phoneNumber) || phoneNumber;
+      const normalizedPatientPhone = normalizePhoneNumber(input.patientPhone);
+      if (normalizedPatientPhone) {
+        input.patientPhone = normalizedPatientPhone;
+      }
 
       // Find or create user
       const user = await userRepository.findOrCreate(normalizedPhone, input.patientName);
@@ -163,7 +166,8 @@ class AppointmentService {
   async listAppointments(filters: AppointmentFilters): Promise<Appointment[]> {
     try {
       if (filters.patientPhone) {
-        filters.patientPhone = normalizePhoneNumber(filters.patientPhone);
+        const normalized = normalizePhoneNumber(filters.patientPhone);
+        filters.patientPhone = normalized || undefined;
       }
 
       return await appointmentRepository.list(filters);
@@ -184,6 +188,9 @@ class AppointmentService {
   ): Promise<Appointment[]> {
     try {
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      if (!normalizedPhone) {
+        return [];
+      }
       const user = await userRepository.findByPhone(normalizedPhone);
 
       if (!user) {

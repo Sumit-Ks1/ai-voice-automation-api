@@ -52,12 +52,12 @@ export interface UpdateAppointmentInput {
 
 export interface User {
   id: string;
-  phone_number: string;
-  name?: string;
-  email?: string;
+  phone_number: string | null;
+  name?: string | null;
+  email?: string | null;
   created_at: string;
   updated_at: string;
-  last_call_at?: string;
+  last_call_at?: string | null;
   total_appointments: number;
   metadata?: Record<string, any>;
 }
@@ -67,7 +67,7 @@ export interface CallLog {
   call_sid: string;
   session_id?: string;
   user_id?: string;
-  from_number: string;
+  from_number: string | null;
   to_number: string;
   direction: 'inbound' | 'outbound';
   status: string;

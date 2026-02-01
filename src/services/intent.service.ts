@@ -123,7 +123,10 @@ class IntentService {
 
     if (extracted.patientPhone) {
       try {
-        parameters.patientPhone = normalizePhoneNumber(extracted.patientPhone);
+        const normalized = normalizePhoneNumber(extracted.patientPhone);
+        if (normalized) {
+          parameters.patientPhone = normalized;
+        }
       } catch (error) {
         this.log.warn({ phone: extracted.patientPhone }, 'Failed to normalize phone');
       }

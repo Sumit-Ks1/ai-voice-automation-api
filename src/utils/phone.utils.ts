@@ -4,21 +4,49 @@
  */
 
 /**
+ * Check if phone number is anonymous/blocked/restricted
+ * @param phone - Phone number string from Twilio
+ */
+export function isAnonymousCaller(phone: string | undefined | null): boolean {
+  if (!phone) return true;
+  const lowerPhone = phone.toLowerCase();
+  return (
+    lowerPhone === 'anonymous' ||
+    lowerPhone === 'restricted' ||
+    lowerPhone === 'blocked' ||
+    lowerPhone === 'unknown' ||
+    lowerPhone === '' ||
+    lowerPhone === '+'
+  );
+}
+
+/**
  * Normalize phone number to E.164 format (+1234567890)
+ * Returns null for anonymous/blocked numbers
  * @param phone - Phone number in various formats
  * @param defaultCountryCode - Default country code if not provided (default: +1)
  */
-export function normalizePhoneNumber(phone: string, defaultCountryCode: string = '+1'): string {
+export function normalizePhoneNumber(phone: string | undefined | null, defaultCountryCode: string = '+1'): string | null {
+  // Handle anonymous/blocked callers
+  if (isAnonymousCaller(phone)) {
+    return null;
+  }
+
   // Remove all non-digit characters
-  let cleaned = phone.replace(/\D/g, '');
+  let cleaned = phone!.replace(/\D/g, '');
+
+  // If cleaned is empty or too short, return null
+  if (cleaned.length < 10) {
+    return null;
+  }
 
   // If no country code and starts with 1, keep it
-  if (!phone.startsWith('+') && cleaned.length === 11 && cleaned.startsWith('1')) {
+  if (!phone!.startsWith('+') && cleaned.length === 11 && cleaned.startsWith('1')) {
     return `+${cleaned}`;
   }
 
   // If no country code, add default
-  if (!phone.startsWith('+')) {
+  if (!phone!.startsWith('+')) {
     // Remove leading 1 if present (US numbers)
     if (cleaned.startsWith('1') && cleaned.length === 11) {
       cleaned = cleaned.substring(1);

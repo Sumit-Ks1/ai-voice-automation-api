@@ -62,14 +62,15 @@ class UltravoxService {
   /**
    * Start new AI voice agent session
    * Creates a WebSocket stream URL for Twilio to connect to
+   * Handles anonymous callers (null phone number)
    * 
    * @param callSid - Twilio Call SID
-   * @param phoneNumber - Caller's phone number
+   * @param phoneNumber - Caller's phone number (null for anonymous)
    * @param metadata - Additional metadata
    */
   async startSession(
     callSid: string,
-    phoneNumber: string,
+    phoneNumber: string | null,
     metadata?: Record<string, any>
   ): Promise<UltravoxStartSessionResponse> {
     const startTime = Date.now();
@@ -79,9 +80,10 @@ class UltravoxService {
         agentId: config.ULTRAVOX_AGENT_ID,
         metadata: {
           callSid,
-          phoneNumber,
+          phoneNumber: phoneNumber || 'anonymous',
           direction: 'inbound',
           timestamp: new Date().toISOString(),
+          isAnonymous: !phoneNumber,
           ...metadata,
         },
         // Optional: customize AI behavior per call
@@ -90,7 +92,7 @@ class UltravoxService {
         maxTokens: 500,
       };
 
-      this.log.info({ callSid, phoneNumber }, 'Starting Ultravox session');
+      this.log.info({ callSid, phoneNumber: phoneNumber || 'anonymous' }, 'Starting Ultravox session');
 
       const response = await this.client.post<UltravoxStartSessionResponse>(
         '/sessions/start',

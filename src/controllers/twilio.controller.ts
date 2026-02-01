@@ -11,6 +11,7 @@ import { setCache } from '../config/redis';
 import { createChildLogger } from '../config/logger';
 import { buildStreamResponse, buildErrorResponse } from '../utils/twiml.builder';
 import { extractCallerInfo } from '../services/twilio.service';
+import { isAnonymousCaller } from '../utils/phone.utils';
 import type { TwilioInboundCallWebhook } from '../types/twilio.types';
 
 const log = createChildLogger({ controller: 'twilio' });
@@ -18,10 +19,11 @@ const log = createChildLogger({ controller: 'twilio' });
 /**
  * Handle inbound call from Twilio
  * Main entry point for voice calls
+ * Handles both known and anonymous callers
  * 
  * Flow:
  * 1. Validate and extract call information
- * 2. Verify/create user
+ * 2. Verify/create user (or anonymous user if caller ID blocked)
  * 3. Create call log
  * 4. Start Ultravox AI session
  * 5. Return TwiML with WebSocket stream URL
@@ -33,23 +35,27 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
     const callData = req.body as TwilioInboundCallWebhook;
     const callerInfo = extractCallerInfo(callData);
 
+    // Check if caller is anonymous
+    const isAnonymous = isAnonymousCaller(callerInfo.from);
+
     log.info(
       {
         callSid: callerInfo.callSid,
-        from: callerInfo.from,
+        from: isAnonymous ? 'Anonymous' : callerInfo.from,
+        isAnonymous,
         correlationId: req.correlationId,
       },
       'Inbound call received'
     );
 
-    // Verify or create user
+    // Verify or create user (handles anonymous callers)
     const user = await userService.verifyUser(callerInfo.from);
 
     // Create call log for tracking
     await callLogRepository.create({
       call_sid: callerInfo.callSid,
       user_id: user.id,
-      from_number: callerInfo.from,
+      from_number: isAnonymous ? null : callerInfo.from,
       to_number: callerInfo.to,
       direction: 'inbound',
       status: 'initiated',
@@ -58,11 +64,12 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
     // Start Ultravox AI session
     const ultravoxSession = await ultravoxService.startSession(
       callerInfo.callSid,
-      callerInfo.from,
+      isAnonymous ? null : callerInfo.from,
       {
         userName: user.name,
         callerCity: callerInfo.fromCity,
         callerState: callerInfo.fromState,
+        isAnonymous,
       }
     );
 
@@ -72,7 +79,8 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
       {
         callSid: callerInfo.callSid,
         userId: user.id,
-        phoneNumber: callerInfo.from,
+        phoneNumber: isAnonymous ? null : callerInfo.from,
+        isAnonymous,
       },
       3600 // 1 hour TTL
     );
@@ -91,6 +99,7 @@ export async function handleInboundCall(req: Request, res: Response): Promise<vo
       {
         callSid: callerInfo.callSid,
         sessionId: ultravoxSession.sessionId,
+        isAnonymous,
         duration,
       },
       'Inbound call handled successfully'

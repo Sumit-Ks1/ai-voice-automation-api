@@ -19,6 +19,43 @@ class UserRepository {
   }
 
   /**
+   * Create an anonymous user for callers with blocked/restricted numbers
+   * Used when caller ID is not available
+   */
+  async createAnonymousUser(): Promise<User> {
+    try {
+      const anonymousId = `anon_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      
+      const { data, error } = await this.db
+        .from('users')
+        .insert({
+          phone_number: null,
+          name: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          total_appointments: 0,
+          metadata: { anonymous: true, session_id: anonymousId },
+        })
+        .select()
+        .single();
+
+      if (error) {
+        this.log.error({ err: error }, 'Failed to create anonymous user');
+        throw new DatabaseError('Failed to create anonymous user');
+      }
+
+      this.log.info({ userId: data.id }, 'Anonymous user created');
+      return data as User;
+    } catch (error) {
+      if (error instanceof DatabaseError) {
+        throw error;
+      }
+      this.log.error({ err: error }, 'Error creating anonymous user');
+      throw new DatabaseError('Database operation failed');
+    }
+  }
+
+  /**
    * Find or create user by phone number
    * Used for authentication and user identification
    * 
@@ -28,6 +65,11 @@ class UserRepository {
   async findOrCreate(phoneNumber: string, name?: string): Promise<User> {
     try {
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      
+      // If phone number is null/invalid, create anonymous user
+      if (!normalizedPhone) {
+        return await this.createAnonymousUser();
+      }
 
       // Try to find existing user
       const existingUser = await this.findByPhone(normalizedPhone);
